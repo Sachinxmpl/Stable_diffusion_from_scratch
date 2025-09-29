@@ -60,3 +60,44 @@ class SelfAttention(nn.Module):
         out = self.proj_dropout(out)
         
         return out
+    
+
+class CrossAttention(nn.Module):
+    def __init__(self , embed_dim , cross_dim , num_heads):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        # query comes from x , key and value comes from y
+        self.q_linear = nn.Linear(embed_dim , embed_dim)
+        self.k_linear = nn.Linear(cross_dim , embed_dim)
+        self.v_linear = nn.Linear(cross_dim , embed_dim)
+
+        self.out_proj = nn.Linear(embed_dim , embed_dim)
+
+    def forward(self , x, y):
+        # x : (Batch_size , seq_len_x , embed_dim)  latent sequences
+        # y : (Batch_size , seq_len_y , cross_dim)  text tokens
+        batch_size , seq_len_x , _ = x.shape
+        _ , seq_len_y , _ = y.shape
+
+        Q = self.q_linear(x)
+        K = self.k_linear(y)
+        V = self.v_linear(y)
+
+        # split to multiples heads
+        Q = Q.view(batch_size , seq_len_x , self.num_heads , self.head_dim).transpose(1,2)
+        K = K.view(batch_size , seq_len_y , self.num_heads , self.head_dim).transpose(1,2)
+        V = V.view(batch_size , seq_len_y , self.num_heads , self.head_dim).transpose(1 ,2)
+
+        # Attention 
+        scores = torch.matmul(Q , K.transpose(-2 , -1)) /  math.sqrt(self.head_dim)
+        attn = F.softmax(scores , dim = -1)
+        context  = torch.matmul(attn , V)
+
+        # merge heads 
+        context = context.transpose(1 ,2).contiguous().view(batch_size , seq_len_x , self.embed_dim 
+                                                            )
+        out = self.out_proj(context)
+        return out 
